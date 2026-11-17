@@ -30,7 +30,9 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
 ]
-ignore = []
+ignore = [
+    "B027", # Allow optional empty hook methods in ABC without @abstractmethod
+]
 
 [tool.pytest.ini_options]
 minversion = "7.0"

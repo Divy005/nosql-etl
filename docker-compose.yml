@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: nosql_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PG_DB:-nasa_analytics}
+      POSTGRES_USER: ${PG_USER:-postgres}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-postgres}
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-postgres} -d ${PG_DB:-nasa_analytics}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7
+    container_name: nosql_mongo
+    restart: unless-stopped
+    profiles:
+      - mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  # ==============================================================================
+  # Hadoop + Hive Services (Placeholder Profile)
+  # NOTE: Member C fills in Hadoop + Hive services here for the Hive pipeline
+  # ==============================================================================
+  # namenode:
+  #   image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+  #   profiles: ["hadoop"]
+  # hive-server:
+  #   image: bde2020/hive:2.3.2-postgresql-metastore
+  #   profiles: ["hadoop"]
+
+volumes:
+  postgres_data:
+  mongo_data:
