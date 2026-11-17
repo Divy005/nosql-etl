@@ -4,6 +4,8 @@ set -euo pipefail
 # ==============================================================================
 # Script: get_data.sh
 # Purpose: Idempotently download and decompress NASA HTTP access logs (Jul/Aug 1995)
+#          If data/NASA_access_log_*95.gz already exist (downloaded manually), they are
+#          decompressed instead of re-downloaded. Decompression is the only change made.
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,6 +24,14 @@ download_and_extract() {
 
     if [ -f "${raw_file}" ]; then
         echo "[INFO] ${raw_file} already exists. Skipping download and decompression."
+        return 0
+    fi
+
+    if [ -f "${gz_file}" ]; then
+        # Archive already downloaded by hand (e.g. in a browser): just decompress it.
+        echo "[INFO] Found ${gz_file}; decompressing (keeping the .gz)..."
+        gzip -dkf "${gz_file}"
+        echo "[INFO] Created ${raw_file}."
         return 0
     fi
 

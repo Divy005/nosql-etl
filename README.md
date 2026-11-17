@@ -19,7 +19,7 @@ A comparative, multi-pipeline ETL and reporting framework designed for large-sca
 
 | Engine | Technology | Status | Owner |
 | :--- | :--- | :---: | :--- |
-| **MongoDB** | Aggregation Pipeline (`$regexFind`, `$group`, `$merge`) | 🚧 In Progress | Divy |
+| **MongoDB** | Aggregation Pipeline (`$regexFind`, `$group`, `$merge`) | ✅ Done (contract test + full data) | Divy |
 | **Apache Hive** | HiveQL (`regexp_extract`, partitioned tables) | 🚧 Planned (Phase 1) | Member C |
 | **Apache Pig** | Pig Latin (`REGEX_EXTRACT_ALL`) | ⏳ Queued (Phase 2) | Member B |
 | **MapReduce** | Hadoop Streaming Python | ⏳ Queued (Phase 2) | Member A |
@@ -76,58 +76,98 @@ A comparative, multi-pipeline ETL and reporting framework designed for large-sca
 - Python 3.11 or higher
 - Docker & Docker Compose
 - Git
-- `bash` / `curl` (for dataset download script)
+- `bash` + `curl` or `wget` for the dataset script (on Windows use **Git Bash**)
+- ~1.5 GB free disk (≈360 MB of logs plus the MongoDB working collections)
 
 ---
 
 ## Quick Start
 
-### 1. Clone & Setup Environment
+### 1. Clone & configure
 ```bash
 git clone <repo-url> nosql-etl
 cd nosql-etl
-
-# Copy environment template
-cp .env.example .env
+cp .env.example .env          # edit ports/passwords here if 5432/27017 are taken
 ```
 
-### 2. Start Services
+### 2. Start services
 ```bash
-# Start PostgreSQL (core) and MongoDB services
-docker compose --profile mongo up -d
+docker compose --profile mongo up -d     # PostgreSQL (schema auto-loaded) + MongoDB
+docker compose ps                        # wait until both show "healthy"
 ```
+`db/schema.sql` is loaded only when the PostgreSQL volume is first created. To reset the
+database: `docker compose down -v` then `up -d` again.
 
-### 3. Install Python Dependencies
+### 3. Install Python dependencies
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate     # Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-### 4. Fetch Dataset
+### 4. Get the dataset
 ```bash
-# Downloads and decompresses Jul95 and Aug95 logs into data/
-bash scripts/get_data.sh
+bash scripts/get_data.sh      # downloads + gunzips the two official files into data/
 ```
+If the download fails (the host `ita.ee.lbl.gov` is sometimes slow or blocked), download
+[NASA_access_log_Jul95.gz](https://ita.ee.lbl.gov/traces/NASA_access_log_Jul95.gz) and
+[NASA_access_log_Aug95.gz](https://ita.ee.lbl.gov/traces/NASA_access_log_Aug95.gz) in a browser,
+put them in `data/`, and run the script again: it then only decompresses them. Decompression
+is the only change ever made to the input files. `data/` is git-ignored; never commit it.
 
-### 5. Run Pipeline
+### 5. Run a pipeline
 ```bash
-# Execute MongoDB pipeline with default batch size (100,000)
 python -m controller.main --pipeline mongodb --batch-size 100000
+python -m controller.main                  # interactive menu: engine + batch size
 ```
+Options: `--input FILE ...` (default: both files in `DATA_DIR`), `--keep-data` (keep the
+engine's working collections/tables after the run). Hive, Pig and MapReduce print a
+"not implemented yet" message until their owners add them.
+
+### 6. Look at the results
+Every run writes to PostgreSQL: `etl_runs` (status, counts, runtimes), `etl_batches`,
+`etl_malformed_samples`, `etl_query_runs`, and the result tables `q1_daily_traffic`,
+`q2_top_resources`, `q3_hourly_errors` (each row carries `pipeline`, `run_id`, `batch_id`,
+`executed_at`).
+
+```bash
+docker compose exec postgres psql -U postgres -d nasa_analytics \
+  -c "SELECT run_id, pipeline, status, total_records, malformed_records, runtime_sec FROM etl_runs;"
+```
+The comparison report (`report.py` / `compare.py`) is owned by Member C.
+
+---
+
+## MongoDB results (full data)
+
+| Batch size | Total | Ingest | Aggregate | Records (parsed + malformed) |
+| ---: | ---: | ---: | ---: | :--- |
+| 50,000 | 113.8 s | 92.3 s | 20.1 s | 3,461,613 (3,461,612 + 1) |
+| 100,000 | 113.2 s | 91.9 s | 19.9 s | 3,461,613 (3,461,612 + 1) |
+| 500,000 | 111.7 s | 89.9 s | 20.5 s | 3,461,613 (3,461,612 + 1) |
+
+The single malformed record is the truncated last line of the official July file. Details,
+tuning measurements and the rounding investigation are in
+[`pipelines/mongodb/README.md`](pipelines/mongodb/README.md); result CSVs in
+[`docs/sample_outputs/`](docs/sample_outputs/).
 
 ---
 
 ## Running Tests
 
 ```bash
-# Run batcher and unit tests
-pytest tests/test_batcher.py
-
-# Run contract tests against test fixtures
-pytest tests/test_contract.py --engine dummy
-pytest tests/test_contract.py --engine mongodb
+ruff check . && ruff format --check .        # lint
+pytest tests/test_batcher.py                  # batcher unit tests
+pytest tests/test_contract.py --engine dummy  # controller/framework smoke test
+pytest tests/test_contract.py --engine mongodb   # needs MongoDB running
 ```
+
+The contract test feeds `spec/test.log` (edge cases: empty/truncated lines, bad month, `-`
+bytes, quotes in the request, case-different hosts, a Q2 tie at rank 20, an exact `.5`
+rounding tie) in batches of 7 and compares every row with `spec/expected/`, which is
+generated by `python -m tests.reference_impl`. CI runs all of the above on every push and PR
+to `main`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the team workflow and how to add an
+engine.
 
 ---
 
@@ -174,5 +214,6 @@ nosql-etl/
 │   ├── test_contract.py          # Strict engine contract compliance suite
 │   └── conftest.py               # Pytest fixtures and options
 └── docs/
-    └── project_statement.pdf     # Official DAS 839 project specification
+    ├── project_statement.pdf     # Official DAS 839 project specification
+    └── sample_outputs/           # Small result CSVs from full-data runs (< 1 MB each)
 ```

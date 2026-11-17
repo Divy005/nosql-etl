@@ -24,6 +24,10 @@ services:
     restart: unless-stopped
     profiles:
       - mongo
+    # Raise the $group memory limit from the 100 MB default to 1 GB: Q2's first stage
+    # builds ~2.1M (resource_path, host) groups, which otherwise spill to disk.
+    # Full data: Q2 26.7 s -> 13.5 s (see pipelines/mongodb/README.md).
+    command: ["mongod", "--setParameter", "internalDocumentSourceGroupMaxMemoryBytes=1073741824"]
     ports:
       - "${MONGO_PORT:-27017}:27017"
     volumes:
