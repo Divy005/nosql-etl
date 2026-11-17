@@ -20,7 +20,7 @@ A comparative, multi-pipeline ETL and reporting framework designed for large-sca
 | Engine | Technology | Status | Owner |
 | :--- | :--- | :---: | :--- |
 | **MongoDB** | Aggregation Pipeline (`$regexFind`, `$group`, `$merge`) | ✅ Done (contract test + full data) | Divy |
-| **Apache Hive** | HiveQL (`regexp_extract`, partitioned tables) | 🚧 Planned (Phase 1) | Member C |
+| **Apache Hive** | HiveQL (`RLIKE`, `regexp_extract`, partitioned ORC tables on HDFS) | ✅ Done (contract test + full data, matches MongoDB) | Member C |
 | **Apache Pig** | Pig Latin (`REGEX_EXTRACT_ALL`) | ⏳ Queued (Phase 2) | Member B |
 | **MapReduce** | Hadoop Streaming Python | ⏳ Queued (Phase 2) | Member A |
 
@@ -98,6 +98,13 @@ docker compose ps                        # wait until both show "healthy"
 `db/schema.sql` is loaded only when the PostgreSQL volume is first created. To reset the
 database: `docker compose down -v` then `up -d` again.
 
+For the **Hive** pipeline start the Hadoop profile instead (about 4 GB of RAM; stop `mongo`
+first on a small machine):
+```bash
+docker compose --profile hadoop up -d    # HDFS (namenode + datanode), Hive metastore, HiveServer2
+docker compose --profile hadoop ps       # hive-server shows "healthy" after about a minute
+```
+
 ### 3. Install Python dependencies
 ```bash
 python -m venv .venv
@@ -123,7 +130,7 @@ python -m controller.main                  # interactive menu: engine + batch si
 Engine names follow the project statement: `mongodb`, `hive`, `pig`, `mapreduce`. Shorthands
 `mongo` and `mr` are accepted for `--pipeline` and `--engine` and are always recorded under the
 full name. Options: `--input FILE ...` (default: both files in `DATA_DIR`), `--keep-data` (keep the
-engine's working collections/tables after the run). Hive, Pig and MapReduce print a
+engine's working collections/tables after the run). Pig and MapReduce print a
 "not implemented yet" message until their owners add them.
 
 ### 6. Look at the results
