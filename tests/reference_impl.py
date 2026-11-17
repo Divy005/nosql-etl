@@ -15,11 +15,12 @@ from typing import Any
 # Line validation regex (anchored strictly from ^ to $)
 LINE_REGEX = re.compile(
     r"^(\S+) \S+ \S+ \[(\d{2})/([A-Za-z]{3})/(\d{4}):"
-    r"(\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})\] \"(.*)\" (\d{3}) (\d+|-)\s*$"
+    r"(\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})\] \"(.*)\" (\d{3}) (\d+|-)\s*$",
+    re.ASCII,  # \s \S \d are ASCII classes, as in MongoDB (PCRE) and Java (Hive/Pig/MR)
 )
 
 # Secondary request splitting regex
-REQUEST_REGEX = re.compile(r"^(\S+)\s+(.*?)(?:\s+(HTTP/\S+))?\s*$")
+REQUEST_REGEX = re.compile(r"^(\S+)\s+(.*?)(?:\s+(HTTP/\S+))?\s*$", re.ASCII)
 
 # Month token to 2-digit zero-padded string mapping
 MONTH_MAP = {
@@ -38,11 +39,20 @@ MONTH_MAP = {
 }
 
 
-def round_half_away_from_zero(val: float, decimals: int = 4) -> float:
-    """Perform exact round-half-away-from-zero rounding."""
-    d = Decimal(str(val))
+def round_half_away_from_zero(numerator: int, denominator: int, decimals: int = 4) -> float:
+    """Exactly round numerator/denominator half-away-from-zero (no float error)."""
+    d = Decimal(numerator) / Decimal(denominator)  # 28 significant digits: exact enough
     target = Decimal("10") ** -decimals
     return float(d.quantize(target, rounding=ROUND_HALF_UP))
+
+
+def strip_terminator(line: str) -> str:
+    """Strip exactly one trailing line terminator (\\r\\n or \\n), nothing else."""
+    if line.endswith("\r\n"):
+        return line[:-2]
+    if line.endswith("\n"):
+        return line[:-1]
+    return line
 
 
 def parse_line(raw_line: str) -> dict[str, Any] | None:
@@ -50,10 +60,10 @@ def parse_line(raw_line: str) -> dict[str, Any] | None:
 
     Returns a dictionary of parsed fields if valid, or None if malformed.
     """
-    # Strip only trailing line terminators
-    line = raw_line.rstrip("\r\n")
+    # Strip only the trailing line terminator
+    line = strip_terminator(raw_line)
 
-    match = LINE_REGEX.match(line)
+    match = LINE_REGEX.fullmatch(line)
     if not match:
         return None
 
@@ -82,7 +92,7 @@ def parse_line(raw_line: str) -> dict[str, Any] | None:
     bytes_transferred = 0 if bytes_str == "-" else int(bytes_str)
 
     # Request decomposition
-    req_match = REQUEST_REGEX.match(request_raw)
+    req_match = REQUEST_REGEX.fullmatch(request_raw)
     if req_match:
         http_method = req_match.group(1)
         resource_path = req_match.group(2)
@@ -227,7 +237,7 @@ def compute_q3(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for (log_date, log_hour), data in groups.items():
         total = data["total_request_count"]
         error = data["error_request_count"]
-        error_rate = round_half_away_from_zero(error / total, 4) if total > 0 else 0.0
+        error_rate = round_half_away_from_zero(error, total, 4) if total > 0 else 0.0
         results.append(
             {
                 "log_date": log_date,
@@ -247,7 +257,7 @@ def write_csv(filepath: Path, rows: list[dict[str, Any]], fieldnames: list[str])
     """Write rows to a CSV file."""
     filepath.parent.mkdir(parents=True, exist_ok=True)
     with open(filepath, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 

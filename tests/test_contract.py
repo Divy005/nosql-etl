@@ -51,9 +51,15 @@ def _skip_if_unavailable(engine_name: str) -> None:
             pytest.skip("MongoDB service unavailable")
     elif engine_name in ("hive", "pig", "mapreduce"):
         try:
-            engine = get_engine(engine_name)  # noqa: F841
+            engine = get_engine(engine_name)
         except (NotImplementedError, ValueError, ImportError):
             pytest.skip(f"Engine '{engine_name}' is not implemented yet")
+        # Optional duck-typed hook (not part of the Engine ABC): an engine that needs
+        # external services may define `is_available() -> bool` so the contract test is
+        # skipped, not failed, where those services are absent (e.g. Hadoop in CI).
+        is_available = getattr(engine, "is_available", None)
+        if callable(is_available) and not is_available():
+            pytest.skip(f"Services for engine '{engine_name}' are unavailable")
 
 
 class TestContractCompliance:
@@ -73,9 +79,7 @@ class TestContractCompliance:
         total_parsed = 0
         total_malformed = 0
 
-        for batch_id, first_line_no, lines in read_batches(
-            [TEST_LOG], CONTRACT_BATCH_SIZE
-        ):
+        for batch_id, first_line_no, lines in read_batches([TEST_LOG], CONTRACT_BATCH_SIZE):
             stats = self.engine.process_batch(run_id, batch_id, lines, first_line_no)
             total_records += stats.record_count
             total_parsed += stats.parsed_count
@@ -108,21 +112,16 @@ class TestContractCompliance:
         actual_rows = self.result.q1.rows
 
         assert len(actual_rows) == len(expected_rows), (
-            f"Q1 row count mismatch: got {len(actual_rows)}, "
-            f"expected {len(expected_rows)}"
+            f"Q1 row count mismatch: got {len(actual_rows)}, expected {len(expected_rows)}"
         )
 
         for i, (actual, expected) in enumerate(zip(actual_rows, expected_rows, strict=True)):
             assert actual["log_date"] == expected["log_date"], f"Q1 row {i}: log_date"
-            assert actual["status_code"] == int(expected["status_code"]), (
-                f"Q1 row {i}: status_code"
-            )
+            assert actual["status_code"] == int(expected["status_code"]), f"Q1 row {i}: status_code"
             assert actual["request_count"] == int(expected["request_count"]), (
                 f"Q1 row {i}: request_count"
             )
-            assert actual["total_bytes"] == int(expected["total_bytes"]), (
-                f"Q1 row {i}: total_bytes"
-            )
+            assert actual["total_bytes"] == int(expected["total_bytes"]), f"Q1 row {i}: total_bytes"
 
     def test_q2_top_resources(self, engine_name: str) -> None:
         if engine_name == "dummy":
@@ -132,8 +131,7 @@ class TestContractCompliance:
         actual_rows = self.result.q2.rows
 
         assert len(actual_rows) == len(expected_rows), (
-            f"Q2 row count mismatch: got {len(actual_rows)}, "
-            f"expected {len(expected_rows)}"
+            f"Q2 row count mismatch: got {len(actual_rows)}, expected {len(expected_rows)}"
         )
 
         for i, (actual, expected) in enumerate(zip(actual_rows, expected_rows, strict=True)):
@@ -146,12 +144,10 @@ class TestContractCompliance:
             assert actual["request_count"] == int(expected["request_count"]), (
                 f"Q2 row {i}: request_count"
             )
-            assert actual["total_bytes"] == int(expected["total_bytes"]), (
-                f"Q2 row {i}: total_bytes"
+            assert actual["total_bytes"] == int(expected["total_bytes"]), f"Q2 row {i}: total_bytes"
+            assert actual["distinct_host_count"] == int(expected["distinct_host_count"]), (
+                f"Q2 row {i}: distinct_host_count"
             )
-            assert actual["distinct_host_count"] == int(
-                expected["distinct_host_count"]
-            ), f"Q2 row {i}: distinct_host_count"
 
     def test_q3_hourly_errors(self, engine_name: str) -> None:
         if engine_name == "dummy":
@@ -161,25 +157,22 @@ class TestContractCompliance:
         actual_rows = self.result.q3.rows
 
         assert len(actual_rows) == len(expected_rows), (
-            f"Q3 row count mismatch: got {len(actual_rows)}, "
-            f"expected {len(expected_rows)}"
+            f"Q3 row count mismatch: got {len(actual_rows)}, expected {len(expected_rows)}"
         )
 
         for i, (actual, expected) in enumerate(zip(actual_rows, expected_rows, strict=True)):
             assert actual["log_date"] == expected["log_date"], f"Q3 row {i}: log_date"
-            assert actual["log_hour"] == int(expected["log_hour"]), (
-                f"Q3 row {i}: log_hour"
+            assert actual["log_hour"] == int(expected["log_hour"]), f"Q3 row {i}: log_hour"
+            assert actual["error_request_count"] == int(expected["error_request_count"]), (
+                f"Q3 row {i}: error_request_count"
             )
-            assert actual["error_request_count"] == int(
-                expected["error_request_count"]
-            ), f"Q3 row {i}: error_request_count"
-            assert actual["total_request_count"] == int(
-                expected["total_request_count"]
-            ), f"Q3 row {i}: total_request_count"
+            assert actual["total_request_count"] == int(expected["total_request_count"]), (
+                f"Q3 row {i}: total_request_count"
+            )
             assert round(actual["error_rate"], 4) == float(expected["error_rate"]), (
                 f"Q3 row {i}: error_rate: "
                 f"got {actual['error_rate']}, expected {expected['error_rate']}"
             )
-            assert actual["distinct_error_hosts"] == int(
-                expected["distinct_error_hosts"]
-            ), f"Q3 row {i}: distinct_error_hosts"
+            assert actual["distinct_error_hosts"] == int(expected["distinct_error_hosts"]), (
+                f"Q3 row {i}: distinct_error_hosts"
+            )
