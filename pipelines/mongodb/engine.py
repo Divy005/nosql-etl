@@ -50,9 +50,18 @@ class MongoDBEngine(Engine):
         raw_col.drop()
         parsed_col.drop()
 
-        # Create indexes on parsed collection for fast querying and batch filtering
+        # batch_id: per-batch count + malformed-sample lookups in process_batch.
         parsed_col.create_index([("batch_id", 1)])
-        parsed_col.create_index([("valid", 1)])
+        # valid: PARTIAL index over malformed docs only. A full {valid: 1} index made
+        # Q1-Q3 slower: their {valid: true} filter matches ~100% of docs, and the
+        # planner picked an index scan over everything instead of a collection scan
+        # (measured in pipelines/mongodb/README.md). The partial index still serves
+        # malformed lookups and cannot be chosen for {valid: true}.
+        parsed_col.create_index(
+            [("batch_id", 1), ("valid", 1)],
+            partialFilterExpression={"valid": False},
+            name="malformed_by_batch",
+        )
 
     def process_batch(
         self,
