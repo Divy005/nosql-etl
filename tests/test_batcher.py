@@ -46,9 +46,9 @@ class TestLineNumbering:
         _write_file(f, ["a", "b", "c", "d", "e"])
 
         batches = list(read_batches([f], batch_size=2))
-        assert batches[0][1] == 1   # first_line_no of batch 1
-        assert batches[1][1] == 3   # first_line_no of batch 2
-        assert batches[2][1] == 5   # first_line_no of batch 3
+        assert batches[0][1] == 1  # first_line_no of batch 1
+        assert batches[1][1] == 3  # first_line_no of batch 2
+        assert batches[2][1] == 5  # first_line_no of batch 3
 
     def test_across_two_files(self, tmp_path: Path) -> None:
         """Line numbers continue across file boundaries."""
@@ -148,6 +148,14 @@ class TestLineTerminatorStripping:
 
         batches = list(read_batches([f], batch_size=10))
         assert batches[0][2] == ["  hello  world  "]
+
+    def test_only_one_terminator_stripped(self, tmp_path: Path) -> None:
+        # Only the final \r\n / \n is the terminator; an extra \r is line content.
+        f = tmp_path / "cr.log"
+        f.write_bytes(b"a\r\r\nb\n\nc")
+
+        batches = list(read_batches([f], batch_size=10))
+        assert batches[0][2] == ["a\r", "b", "", "c"]
 
 
 class TestLatin1Decoding:

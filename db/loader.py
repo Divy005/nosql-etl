@@ -249,6 +249,9 @@ def fail_run(
     error_message: str,
 ) -> None:
     """Mark the run as failed and store the error message."""
+    # If the failure happened mid-transaction, the connection is in an aborted state
+    # and would reject the UPDATE below; discard the partial work first.
+    conn.rollback()
     with conn.cursor() as cur:
         cur.execute(
             """

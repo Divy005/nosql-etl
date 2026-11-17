@@ -109,12 +109,12 @@ def main() -> None:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  NASA ETL Pipeline Run")
     print(f"  Engine:     {engine.name}")
     print(f"  Batch size: {batch_size:,}")
     print(f"  Input:      {', '.join(str(f) for f in input_files)}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Connect to PostgreSQL
     conn = psycopg.connect(get_pg_dsn(), autocommit=False)
@@ -206,7 +206,12 @@ def main() -> None:
             last_batch_id=last_batch_id,
             result=result,
             executed_at=executed_at,
-        )
+        )  # commits
+
+        # --- TIMER STOP --- (results are committed; the remaining UPDATE only records
+        # the measured numbers, so the stored runtime equals the printed runtime)
+        timing.load = load_timer.stop()
+        timing.total = total_timer.stop()
 
         finish_run(
             conn,
@@ -215,15 +220,11 @@ def main() -> None:
             parsed_records=parsed_records,
             malformed_records=malformed_records,
             num_batches=num_batches,
-            runtime_sec=total_timer.elapsed,
+            runtime_sec=timing.total,
             ingest_runtime_sec=timing.ingest,
             aggregate_runtime_sec=timing.aggregate,
-            load_runtime_sec=load_timer.elapsed,
+            load_runtime_sec=timing.load,
         )
-        timing.load = load_timer.stop()
-
-        # --- TIMER STOP ---
-        timing.total = total_timer.stop()
 
         # --- Console summary ---
         avg_batch = total_records / num_batches if num_batches else 0
@@ -242,11 +243,11 @@ def main() -> None:
             ["  Load", f"{timing.load:.4f}s"],
         ]
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("  Run Summary")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(tabulate(summary_data, tablefmt="plain"))
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
     except Exception:
         if run_id is not None:

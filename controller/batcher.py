@@ -41,7 +41,12 @@ def read_batches(
         with open(filepath, "rb") as f:
             for raw_bytes in f:
                 global_line_no += 1
-                line = raw_bytes.decode("latin-1").rstrip("\r\n")
+                # Strip exactly one trailing terminator (\r\n or \n); nothing else.
+                if raw_bytes.endswith(b"\r\n"):
+                    raw_bytes = raw_bytes[:-2]
+                elif raw_bytes.endswith(b"\n"):
+                    raw_bytes = raw_bytes[:-1]
+                line = raw_bytes.decode("latin-1")
 
                 if not current_batch:
                     first_line_no = global_line_no
