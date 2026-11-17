@@ -71,3 +71,4 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/settings.json
+.hive_staging/
