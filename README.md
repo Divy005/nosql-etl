@@ -120,7 +120,9 @@ is the only change ever made to the input files. `data/` is git-ignored; never c
 python -m controller.main --pipeline mongodb --batch-size 100000
 python -m controller.main                  # interactive menu: engine + batch size
 ```
-Options: `--input FILE ...` (default: both files in `DATA_DIR`), `--keep-data` (keep the
+Engine names follow the project statement: `mongodb`, `hive`, `pig`, `mapreduce`. Shorthands
+`mongo` and `mr` are accepted for `--pipeline` and `--engine` and are always recorded under the
+full name. Options: `--input FILE ...` (default: both files in `DATA_DIR`), `--keep-data` (keep the
 engine's working collections/tables after the run). Hive, Pig and MapReduce print a
 "not implemented yet" message until their owners add them.
 

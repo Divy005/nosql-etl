@@ -2,6 +2,8 @@
 
 import pytest
 
+from pipelines import canonical_engine_name
+
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
@@ -14,4 +16,5 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 @pytest.fixture
 def engine_name(request: pytest.FixtureRequest) -> str:
-    return request.config.getoption("--engine")
+    # Accept aliases such as --engine mongo; tests always see the canonical name.
+    return canonical_engine_name(request.config.getoption("--engine"))

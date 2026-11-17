@@ -18,7 +18,12 @@ from controller.batcher import read_batches
 from controller.config import get_pg_dsn
 from controller.timing import Timer, TimingBreakdown
 from db.loader import create_run, fail_run, finish_run, load_results, record_batch
-from pipelines import get_engine, list_available_engines
+from pipelines import (
+    ENGINE_ALIASES,
+    canonical_engine_name,
+    get_engine,
+    list_available_engines,
+)
 
 MENU_ENGINES = ["mongodb", "hive", "pig", "mapreduce"]
 
@@ -50,10 +55,13 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--pipeline",
-        type=str,
         default=None,
+        type=canonical_engine_name,  # accepts aliases, e.g. "mongo" -> "mongodb"
         choices=list_available_engines(),
-        help="Engine to use for processing.",
+        metavar="{" + ",".join(list_available_engines()) + "}",
+        help="Engine to use. Aliases: "
+        + ", ".join(f"{a} -> {c}" for a, c in ENGINE_ALIASES.items())
+        + ".",
     )
     parser.add_argument(
         "--batch-size",
