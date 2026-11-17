@@ -55,8 +55,8 @@ jobs:
           ruff check .
           ruff format --check .
 
-      - name: Batcher tests
-        run: pytest tests/test_batcher.py
+      - name: Unit tests (batcher, loader, report, HiveQL)
+        run: pytest tests --ignore=tests/test_contract.py
 
       - name: Contract test (dummy)
         run: pytest tests/test_contract.py --engine dummy

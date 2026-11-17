@@ -136,7 +136,30 @@ Every run writes to PostgreSQL: `etl_runs` (status, counts, runtimes), `etl_batc
 docker compose exec postgres psql -U postgres -d nasa_analytics \
   -c "SELECT run_id, pipeline, status, total_records, malformed_records, runtime_sec FROM etl_runs;"
 ```
-The comparison report (`report.py` / `compare.py`) is owned by Member C.
+#### Report: results + run metadata (`report.py`)
+Reads only PostgreSQL, so it works after any run and is outside the timed span.
+```bash
+python report.py                      # latest succeeded run
+python report.py --pipeline hive      # latest run of one pipeline (aliases: mongo, mr)
+python report.py --run-id 3 --full    # one run, every result row
+python report.py --export docs/sample_outputs     # also write the run's results as CSV
+python report.py --compare            # runtimes of all pipelines side by side
+```
+It prints the pipeline, query name, runtime, batch ID, batch size and average batch size of the
+run, the three result sets, the batches and the malformed lines. `--compare` shows the latest
+full-data run of every pipeline and batch size (total, ingest, aggregate, load, Q1/Q2/Q3, and the
+ratio to the fastest at that batch size).
+
+#### Checker: do the pipelines agree? (`compare.py`)
+```bash
+python compare.py                     # Hive vs MongoDB
+python compare.py --engine all        # every pipeline that has a run, each vs MongoDB
+python compare.py --run-a 3 --run-b 2 # two explicit runs
+```
+It compares the record counts and every result cell (Q1 by `(log_date, status_code)`, Q2 by `rank`,
+Q3 by `(log_date, log_hour)`, `error_rate` exactly), ignoring `id`, `run_id`, `batch_id`,
+`pipeline` and `executed_at`, and prints PASS or FAIL per query. Exit status 0 = all PASS,
+1 = a difference, 2 = a run is missing. It only compares runs on the same input files.
 
 ---
 
@@ -160,6 +183,7 @@ tuning measurements and the rounding investigation are in
 ```bash
 ruff check . && ruff format --check .        # lint
 pytest tests/test_batcher.py                  # batcher unit tests
+pytest tests --ignore=tests/test_contract.py  # all unit tests (loader/report need PostgreSQL)
 pytest tests/test_contract.py --engine dummy  # controller/framework smoke test
 pytest tests/test_contract.py --engine mongodb   # needs MongoDB running
 ```
@@ -197,7 +221,10 @@ nosql-etl/
 │   └── expected/                 # Ground-truth query outputs & counts
 ├── db/
 │   ├── schema.sql                # PostgreSQL relational database contract
-│   └── loader.py                 # Standardized relational loader
+│   ├── loader.py                 # Standardized relational loader
+│   └── reader.py                 # Read side shared by report.py and compare.py
+├── report.py                     # Report: run metadata + results, --compare runtimes
+├── compare.py                    # Checker: PASS/FAIL equivalence of two pipelines
 ├── controller/
 │   ├── main.py                   # CLI entry point & menu
 │   ├── batcher.py                # Pure line streaming & batch partitioning
