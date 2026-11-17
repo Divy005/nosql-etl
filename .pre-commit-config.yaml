@@ -4,8 +4,12 @@ repos:
     hooks:
       - id: check-added-large-files
         args: ['--maxkb=1000']
+      # spec/ fixtures are byte-exact test data (test.log has a deliberate
+      # trailing-whitespace line), so the auto-fixers must not touch them.
       - id: trailing-whitespace
+        exclude: ^spec/
       - id: end-of-file-fixer
+        exclude: ^spec/
       - id: check-yaml
       - id: check-toml
       - id: check-json
