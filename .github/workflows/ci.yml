@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: nasa_analytics
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nasa_analytics"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      PG_HOST: localhost
+      PG_PORT: "5432"
+      PG_DB: nasa_analytics
+      PG_USER: postgres
+      PG_PASSWORD: postgres # CI-only throwaway service password
+      MONGO_URI: mongodb://localhost:27017/
+      MONGO_DB: nasa_etl
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Batcher tests
+        run: pytest tests/test_batcher.py
+
+      - name: Contract test (dummy)
+        run: pytest tests/test_contract.py --engine dummy
+
+      - name: Contract test (mongodb)
+        run: pytest tests/test_contract.py --engine mongodb
+
+      # Hadoop-based engines need services CI does not run; their contract tests
+      # skip themselves (not fail) when the engine is missing or unavailable.
+      - name: Contract tests (hive / pig / mapreduce, skipped without Hadoop)
+        run: |
+          pytest tests/test_contract.py --engine hive
+          pytest tests/test_contract.py --engine pig
+          pytest tests/test_contract.py --engine mapreduce
+
+      - name: Load PostgreSQL schema
+        run: psql "postgresql://postgres:postgres@localhost:5432/nasa_analytics" -f db/schema.sql
+
+      - name: End-to-end smoke run (controller -> engine -> PostgreSQL)
+        run: |
+          python -m controller.main --pipeline dummy --batch-size 10 --input spec/test.log
+          python -m controller.main --pipeline mongodb --batch-size 7 --input spec/test.log
+          psql "postgresql://postgres:postgres@localhost:5432/nasa_analytics" -c \
+            "SELECT run_id, pipeline, status, total_records, parsed_records, malformed_records FROM etl_runs;"
