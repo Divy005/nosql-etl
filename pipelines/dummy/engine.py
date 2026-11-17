@@ -55,7 +55,7 @@ class DummyEngine(Engine):
         q2_rows = [
             {
                 "rank": i + 1,
-                "resource_path": f"/images/logo_{i+1}.gif",
+                "resource_path": f"/images/logo_{i + 1}.gif",
                 "request_count": 100 - i * 3,
                 "total_bytes": (100 - i * 3) * 512,
                 "distinct_host_count": 50 - i,

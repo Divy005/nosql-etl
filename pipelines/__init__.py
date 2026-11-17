@@ -47,4 +47,3 @@ def get_engine(name: str) -> Engine:
 def list_available_engines() -> list[str]:
     """Return a list of all recognized engine names."""
     return ["mongodb", "hive", "pig", "mapreduce", "dummy"]
-

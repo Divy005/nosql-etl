@@ -185,7 +185,9 @@ def build_parsing_pipeline(batch_id: int, target_collection: str) -> list[dict[s
             "$project": {
                 "batch_id": 1,
                 "line_no": 1,
-                "line": 1,
+                # Malformed docs keep the raw line for reporting; valid docs drop it
+                # (the parsed fields carry everything the queries need).
+                "line": {"$cond": ["$valid", "$$REMOVE", "$line"]},
                 "valid": 1,
                 "host": 1,
                 "log_date": {
@@ -330,7 +332,7 @@ def build_q3_pipeline() -> list[dict[str, Any]]:
 
     Stage 1: Group by (log_date, log_hour, host) tracking errors and totals per host.
     Stage 2: Group by (log_date, log_hour) summing metrics and counting distinct error hosts.
-    Stage 3: Calculate error_rate with round-half-away-from-zero arithmetic.
+    Stage 3: Calculate error_rate with exact integer round-half-away-from-zero arithmetic.
     """
     return [
         {"$match": {"valid": True}},
@@ -363,9 +365,23 @@ def build_q3_pipeline() -> list[dict[str, Any]]:
                 "_id": {"log_date": "$_id.log_date", "log_hour": "$_id.log_hour"},
                 "total_request_count": {"$sum": "$total_count"},
                 "error_request_count": {"$sum": "$error_count"},
-                "distinct_error_hosts": {
-                    "$sum": {"$cond": [{"$gt": ["$error_count", 0]}, 1, 0]}
+                "distinct_error_hosts": {"$sum": {"$cond": [{"$gt": ["$error_count", 0]}, 1, 0]}},
+            }
+        },
+        # error_rate = round_half_away_from_zero(error / total, 4), computed with exact
+        # integer arithmetic (MongoDB's $round is half-to-even, and a float-based
+        # floor(x * 10000 + 0.5) can misround when x * 10000 lands just below .5):
+        #   k = floor((error * 20000 + total) / (2 * total))   [integer division via $mod]
+        #   error_rate = k / 10000
+        {
+            "$set": {
+                "_num": {
+                    "$add": [
+                        {"$multiply": [{"$toLong": "$error_request_count"}, 20000]},
+                        {"$toLong": "$total_request_count"},
+                    ]
                 },
+                "_den": {"$multiply": [{"$toLong": "$total_request_count"}, 2]},
             }
         },
         {
@@ -375,32 +391,14 @@ def build_q3_pipeline() -> list[dict[str, Any]]:
                 "error_request_count": 1,
                 "distinct_error_hosts": 1,
                 "error_rate": {
-                    "$cond": [
-                        {"$eq": ["$total_request_count", 0]},
-                        0.0,
+                    "$divide": [
                         {
                             "$divide": [
-                                {
-                                    "$floor": {
-                                        "$add": [
-                                            {
-                                                "$multiply": [
-                                                    {
-                                                        "$divide": [
-                                                            "$error_request_count",
-                                                            "$total_request_count",
-                                                        ]
-                                                    },
-                                                    10000,
-                                                ]
-                                            },
-                                            0.5,
-                                        ]
-                                    }
-                                },
-                                10000.0,
+                                {"$subtract": ["$_num", {"$mod": ["$_num", "$_den"]}]},
+                                "$_den",
                             ]
                         },
+                        10000,
                     ]
                 },
             }

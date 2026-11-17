@@ -31,7 +31,7 @@ class MongoDBEngine(Engine):
     @property
     def db(self) -> Database:
         if self._db is None or self._client is None:
-            self._client = MongoClient(self.uri)
+            self._client = MongoClient(self.uri, serverSelectionTimeoutMS=5000)
             self._db = self._client[self.db_name]
         return self._db
 
@@ -169,7 +169,7 @@ class MongoDBEngine(Engine):
                 "log_hour": int(doc["_id"]["log_hour"]),
                 "error_request_count": int(doc["error_request_count"]),
                 "total_request_count": int(doc["total_request_count"]),
-                "error_rate": float(round(doc["error_rate"], 4)),
+                "error_rate": float(doc["error_rate"]),
                 "distinct_error_hosts": int(doc["distinct_error_hosts"]),
             }
             for doc in q3_docs
