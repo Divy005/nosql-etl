@@ -1,47 +1,26 @@
 """Tests for db/loader.py against a real PostgreSQL (skipped when none is reachable).
 
-The tables from db/schema.sql are created inside a throw-away PostgreSQL *schema*
-(search_path = that schema only), so the tests can never touch or wipe the ``public``
-tables that hold real runs, even though schema.sql starts with ``DROP TABLE IF EXISTS``.
+The ``pg_conn`` fixture (tests/conftest.py) creates the tables of db/schema.sql inside a
+throw-away PostgreSQL schema, so these tests can never touch the ``public`` tables that hold
+real runs.
 """
 
-import uuid
-from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from pathlib import Path
 
 import psycopg
 import pytest
 from psycopg.rows import dict_row
 
-from controller.config import get_pg_dsn
 from db.loader import create_run, fail_run, finish_run, load_results, record_batch
 from pipelines.base import BatchStats, FinalResult, QueryResult
 
-SCHEMA_SQL = Path(__file__).resolve().parent.parent / "db" / "schema.sql"
 NOW = datetime(1995, 7, 1, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
-def conn() -> Iterator[psycopg.Connection]:
-    try:
-        connection = psycopg.connect(get_pg_dsn(), autocommit=False, connect_timeout=3)
-    except psycopg.OperationalError:
-        pytest.skip("PostgreSQL service unavailable")
-
-    schema = f"loader_test_{uuid.uuid4().hex[:8]}"
-    connection.execute(f'CREATE SCHEMA "{schema}"')
-    connection.execute(f'SET search_path TO "{schema}"')
-    connection.execute(SCHEMA_SQL.read_text(encoding="utf-8"))
-    connection.commit()  # the SET must be committed or a later rollback would undo it
-    try:
-        yield connection
-    finally:
-        connection.rollback()
-        connection.execute(f'DROP SCHEMA "{schema}" CASCADE')
-        connection.commit()
-        connection.close()
+def conn(pg_conn: psycopg.Connection) -> psycopg.Connection:
+    return pg_conn
 
 
 def _stats(n: int, malformed: int = 0, samples: int = 0, first: int = 1) -> BatchStats:
