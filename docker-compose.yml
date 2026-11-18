@@ -39,16 +39,87 @@ services:
       retries: 10
 
   # ==============================================================================
-  # Hadoop + Hive Services (Placeholder Profile)
-  # NOTE: Member C fills in Hadoop + Hive services here for the Hive pipeline
+  # Hadoop + Hive (profile "hadoop"), used by the Hive pipeline
+  #   docker compose --profile hadoop up -d
+  # Five containers: HDFS (namenode + datanode), a PostgreSQL metastore database, the
+  # Hive metastore service and HiveServer2 (Thrift, port 10000). All use the
+  # big-data-europe images (Hadoop 2.7.4 + Hive 2.3.2, one consistent version set).
+  # Memory: about 4-5 GB. Stop the "mongo" profile while running Hive on a small laptop.
   # ==============================================================================
-  # namenode:
-  #   image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
-  #   profiles: ["hadoop"]
-  # hive-server:
-  #   image: bde2020/hive:2.3.2-postgresql-metastore
-  #   profiles: ["hadoop"]
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop2.7.4-java8
+    container_name: nosql_namenode
+    restart: unless-stopped
+    profiles: ["hadoop"]
+    env_file: ./docker/hadoop-hive.env
+    environment:
+      CLUSTER_NAME: nasa-etl
+    volumes:
+      - namenode_data:/hadoop/dfs/name
+    ports:
+      - "${HDFS_UI_PORT:-50070}:50070"
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop2.7.4-java8
+    container_name: nosql_datanode
+    restart: unless-stopped
+    profiles: ["hadoop"]
+    env_file: ./docker/hadoop-hive.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:50070"
+    volumes:
+      - datanode_data:/hadoop/dfs/data
+    depends_on:
+      - namenode
+
+  hive-metastore-postgresql:
+    image: bde2020/hive-metastore-postgresql:2.3.0
+    container_name: nosql_hive_metastore_db
+    restart: unless-stopped
+    profiles: ["hadoop"]
+    volumes:
+      - hive_metastore_data:/var/lib/postgresql/data
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: nosql_hive_metastore
+    restart: unless-stopped
+    profiles: ["hadoop"]
+    env_file: ./docker/hadoop-hive.env
+    command: /opt/hive/bin/hive --service metastore
+    environment:
+      SERVICE_PRECONDITION: "namenode:50070 datanode:50075 hive-metastore-postgresql:5432"
+    depends_on:
+      - namenode
+      - datanode
+      - hive-metastore-postgresql
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: nosql_hive_server
+    restart: unless-stopped
+    profiles: ["hadoop"]
+    env_file: ./docker/hadoop-hive.env
+    environment:
+      SERVICE_PRECONDITION: "hive-metastore:9083"
+    ports:
+      - "${HIVE_PORT:-10000}:10000"
+    volumes:
+      # The Hive engine writes each batch to a text file here, then HiveQL
+      # "LOAD DATA LOCAL INPATH '/staging/...'" copies it into HDFS.
+      - ${HIVE_STAGING_DIR:-./.hive_staging}:/staging
+    depends_on:
+      - hive-metastore
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/10000'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
 
 volumes:
   postgres_data:
   mongo_data:
+  namenode_data:
+  datanode_data:
+  hive_metastore_data:

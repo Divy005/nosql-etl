@@ -2,9 +2,11 @@
 
 from pipelines.base import Engine
 from pipelines.dummy.engine import DummyEngine
+from pipelines.hive.engine import HiveEngine
 
 _REGISTRY: dict[str, type[Engine]] = {
     "dummy": DummyEngine,
+    "hive": HiveEngine,
 }
 
 

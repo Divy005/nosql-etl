@@ -1,0 +1,4 @@
+run_id,pipeline,batch_size,num_batches,avg_batch_size,total_records,parsed_records,malformed_records,runtime_sec,ingest_runtime_sec,aggregate_runtime_sec,load_runtime_sec
+3,hive,100000,35,98903.23,3461613,3461612,1,305.5261,278.0066,24.1331,0.2231
+4,hive,50000,70,49451.61,3461613,3461612,1,438.0071,410.4021,24.2088,0.1861
+5,hive,500000,7,494516.14,3461613,3461612,1,195.0697,167.6907,24.0217,0.2372
