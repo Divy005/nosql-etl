@@ -9,9 +9,9 @@ A comparative, multi-pipeline ETL and reporting framework designed for large-sca
 | Member | Phase | Responsibility Area |
 | :--- | :--- | :--- |
 | **Divy** | Phase 1 | Repository & Docker setup, parsing specification, test data suite, CLI controller (batching & timing), MongoDB pipeline, presentation |
-| **Member C** | Phase 1 | PostgreSQL relational schema & loader, Hadoop/Hive infrastructure, HiveQL pipeline, report script & validation checker |
-| **Member A** | Phase 2 | Hadoop Streaming MapReduce pipeline, comparative scaling experiments across all 4 engines, report write-up |
-| **Member B** | Phase 2 | Apache Pig pipeline, performance analysis, final PDF report compilation, demo video |
+| **Dilksh** | Phase 1 | PostgreSQL relational schema & loader, Hadoop/Hive infrastructure, HiveQL pipeline, report script & validation checker |
+| **Shivansh** | Phase 2 | Hadoop Streaming MapReduce pipeline, comparative scaling experiments across all 4 engines, report write-up |
+| **Nishanth** | Phase 2 | Apache Pig pipeline, performance analysis, final PDF report compilation, demo video |
 
 ---
 
